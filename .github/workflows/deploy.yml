@@ -1,13 +1,12 @@
-name: Build and Push to ECR
+name: CI/CD to ECR and Kubernetes
 
-# トリガー：mainブランチにpushされたとき
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # mainブランチにpushされたら実行
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest  # GitHubのホストランナーを使用
+  deploy:
+    runs-on: ubuntu-latest  # GitHubホストランナーを使用
 
     steps:
     # ① コードをチェックアウト
@@ -28,9 +27,23 @@ jobs:
       uses: aws-actions/amazon-ecr-login@v1
 
     # ④ DockerイメージをビルドしてECRにpush
-    - name: Build, tag, and push image to ECR
+    - name: Build and Push Docker Image
       run: |
         IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/my-nginx-app:latest
         echo "Building Docker image: $IMAGE_URI"
         docker build -t $IMAGE_URI .
         docker push $IMAGE_URI
+    # ⑤ kubectlをセットアップ
+    - name: Setup kubectl
+      run: |
+        echo "${{ secrets.KUBECONFIG_DATA }}" > kubeconfig.yaml
+        export KUBECONFIG=kubeconfig.yaml
+        curl -LO "https://dl.k8s.io/release/$(curl -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+
+    # ⑥ Kubernetesマニフェストを適用
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml

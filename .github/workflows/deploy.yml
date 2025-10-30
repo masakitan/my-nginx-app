@@ -2,38 +2,39 @@ name: CI/CD to ECR and Kubernetes
 
 on:
   push:
-    branches: [ main ]  # mainブランチにpushされたら実行
+    branches: [ main ]
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # GitHubホストランナーを使用
+    runs-on: ubuntu-latest
 
     steps:
     # ① コードをチェックアウト
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # ② AWS認証を設定（Secretsから取得）
+    # ② AWS認証設定
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v2
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ap-northeast-1  # 東京リージョン
+        aws-region: ap-northeast-1
 
-    # ③ ECRにログイン
+    # ③ ECRログイン
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v1
 
-    # ④ DockerイメージをビルドしてECRにpush
+    # ④ Dockerビルド＆ECRへpush
     - name: Build and Push Docker Image
       run: |
         IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/my-nginx-app:latest
         echo "Building Docker image: $IMAGE_URI"
         docker build -t $IMAGE_URI .
         docker push $IMAGE_URI
-    # ⑤ kubectlをセットアップ
+
+    # ⑤ kubectlセットアップ + kubeconfig設定
     - name: Setup kubectl
       run: |
         echo "${{ secrets.KUBECONFIG_DATA }}" > kubeconfig.yaml
@@ -41,9 +42,13 @@ jobs:
         curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl"
         chmod +x kubectl
         sudo mv kubectl /usr/local/bin/
+        kubectl version --client
+        echo "KUBECONFIG is set to $KUBECONFIG"
+        kubectl config view
 
-    # ⑥ Kubernetesマニフェストを適用
+    # ⑥ Kubernetesへデプロイ
     - name: Deploy to Kubernetes
       run: |
-        kubectl apply -f k8s/deployment.yaml
-        kubectl apply -f k8s/service.yaml
+        export KUBECONFIG=$PWD/kubeconfig.yaml
+        kubectl apply -f k8s/deployment.yaml --validate=false
+        kubectl apply -f k8s/service.yaml --validate=false

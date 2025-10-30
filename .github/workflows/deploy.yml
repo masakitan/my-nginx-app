@@ -52,3 +52,8 @@ jobs:
         export KUBECONFIG=$PWD/kubeconfig.yaml
         kubectl apply -f k8s/deployment.yaml --validate=false --insecure-skip-tls-verify=true
         kubectl apply -f k8s/service.yaml --validate=false --insecure-skip-tls-verify=true
+    
+    - name: Force rollout restart
+      run: |
+        export KUBECONFIG=$PWD/kubeconfig.yaml
+        kubectl rollout restart deployment/nginx-deployment --insecure-skip-tls-verify=true
